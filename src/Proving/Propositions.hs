@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 module Proving.Propositions
   ( -- * Basics #basics#
     -- $basics
@@ -11,9 +12,7 @@ module Proving.Propositions
   , arbitraryEnvForVarStrings
     -- * Representation #representations#
     -- $representation
-  , Representation
-  , fromProposition
-  , evaluate
+  , Representation(..)
     -- * Basic propositions #basic-propositions#
     -- $basicPropositions
   , Atom(..)
@@ -42,6 +41,11 @@ import qualified Data.List.NonEmpty as NonEmpty
   , fromList )
 import Data.List
   ( intercalate )
+import Data.Set
+  ( Set )
+import qualified Data.Set as Set
+  ( singleton
+  , empty )
 import Test.QuickCheck
   ( sized
   , scale
@@ -64,7 +68,7 @@ bracketWrap s = "(" ++ s ++ ")"
 -- Basics for the module
 
 newtype Varname = Varname String
-  deriving ( Eq )
+  deriving ( Eq, Ord )
 
 instance Show Varname where
   show (Varname var) = var
@@ -130,6 +134,10 @@ evalAtom :: Env -> Atom -> Maybe Bool
 evalAtom _ (AtomLit b) = Just b
 evalAtom env (AtomVar var) = envEval var env
 
+atomFreeVars :: Atom -> Set Varname
+atomFreeVars (AtomLit _) = Set.empty
+atomFreeVars (AtomVar var) = Set.singleton var
+
 -- | A proposition of propositional logic
 data Proposition
   = PropAtom Atom
@@ -178,15 +186,19 @@ instance Arbitrary Proposition where
 
 -- | The typeclass for representations of propositions in propositional logic.
 class Representation a where
-  -- | Convert the basic representation of a proposition into the other representation
+  -- | Convert the basic representation of a proposition into the other representation.
   fromProposition :: Proposition -> a
   -- | Evaluate a proposition. If fails to evaluate due to not having a valuation for a variable then returns Nothing.
   -- Due to how evaluation is sometimes performed, this doesn't always detect variables without valuations and will sometimes return a
   -- result if one can be determined without evaluating some variables.
   evaluate :: Env -> a -> Maybe Bool
+  -- | Determine the set of free variables.
+  freeVars :: a -> Set Varname
 
 instance Representation Proposition where
+  fromProposition :: Proposition -> Proposition
   fromProposition = id
+  evaluate :: Env -> Proposition -> Maybe Bool
   evaluate env (PropAtom a) = evalAtom env a
   evaluate env (PropNot p) = not <$> evaluate env p
   evaluate env (PropOr ps) = foldr foldFunc (Just False) ps where
@@ -203,6 +215,13 @@ instance Representation Proposition where
       Just True -> next
   evaluate env (PropImpl a b) = evaluate env (PropOr (PropNot a :| [b]))
   evaluate env (PropBiImpl a b) = evaluate env (PropOr (PropAnd (a :| [b]) :| [PropAnd (PropNot a :| [PropNot b])]))
+  freeVars :: Proposition -> Set Varname
+  freeVars (PropAtom a) = atomFreeVars a
+  freeVars (PropNot p) = freeVars p
+  freeVars (PropOr ps) = foldr ((<>) . freeVars) Set.empty ps
+  freeVars (PropAnd ps) = foldr ((<>) . freeVars) Set.empty ps
+  freeVars (PropImpl a b) = freeVars a <> freeVars b
+  freeVars (PropBiImpl a b) = freeVars a <> freeVars b
 
 -- $nnf
 --
@@ -252,6 +271,11 @@ evalNegAtom _ (NegAtomLit b) = Just b
 evalNegAtom env (NegAtomVar var) = envEval var env
 evalNegAtom env (NegAtomNegVar var) = not <$> envEval var env
 
+negAtomFreeVars :: NegAtom -> Set Varname
+negAtomFreeVars (NegAtomLit _) = Set.empty
+negAtomFreeVars (NegAtomVar var) = Set.singleton var
+negAtomFreeVars (NegAtomNegVar var) = Set.singleton var
+
 -- | Propositional logic proposition in NNF (Negated Normal Form)
 data NnfProposition
   = NnfAtom NegAtom
@@ -290,7 +314,9 @@ simplePropositionToNnfProposition (SPNot (SPOr ps)) = (NnfAnd . fmap (simpleProp
 simplePropositionToNnfProposition (SPNot (SPAnd ps)) = (NnfOr . fmap (simplePropositionToNnfProposition . SPNot)) ps
 
 instance Representation NnfProposition where
+  fromProposition :: Proposition -> NnfProposition
   fromProposition = simplePropositionToNnfProposition . propositionToSimpleProposition
+  evaluate :: Env -> NnfProposition -> Maybe Bool
   evaluate env (NnfAtom a) = evalNegAtom env a
   evaluate env (NnfOr ps) = foldr foldFunc (Just False) ps where
     foldFunc :: NnfProposition -> Maybe Bool -> Maybe Bool
@@ -304,6 +330,10 @@ instance Representation NnfProposition where
       Nothing -> Nothing
       Just False -> Just False
       Just True -> next
+  freeVars :: NnfProposition -> Set Varname
+  freeVars (NnfAtom a) = negAtomFreeVars a
+  freeVars (NnfOr ps) = foldr ((<>) . freeVars) Set.empty ps
+  freeVars (NnfAnd ps) = foldr ((<>) . freeVars) Set.empty ps
 
 -- $cnf
 --
@@ -349,7 +379,9 @@ nnfPropositionToCnfProposition (NnfOr ps) = (CnfProposition . fmap CnfTerm . fus
   fuseAll (h :| ts) = foldr fuseTwo h ts
 
 instance Representation CnfProposition where
+  fromProposition :: Proposition -> CnfProposition
   fromProposition = nnfPropositionToCnfProposition . fromProposition
+  evaluate :: Env -> CnfProposition -> Maybe Bool
   evaluate env (CnfProposition terms) = foldr foldPropFunc (Just True) terms where
     foldPropFunc :: CnfTerm -> Maybe Bool -> Maybe Bool
     foldPropFunc term next = case evalTerm term of
@@ -363,6 +395,10 @@ instance Representation CnfProposition where
       Nothing -> Nothing
       Just True -> Just True
       Just False -> next
+  freeVars :: CnfProposition -> Set Varname
+  freeVars (CnfProposition terms) = foldr ((<>) . getTermVars) Set.empty terms where
+    getTermVars :: CnfTerm -> Set Varname
+    getTermVars = foldr ((<>) . negAtomFreeVars) Set.empty . unwrapCnfTerm
 
 -- $dnf
 --
@@ -408,7 +444,9 @@ nnfPropositionToDnfProposition (NnfAnd ps) = (DnfProposition . fmap DnfTerm . fu
   fuseAll (h :| ts) = foldr fuseTwo h ts
 
 instance Representation DnfProposition where
+  fromProposition :: Proposition -> DnfProposition
   fromProposition = nnfPropositionToDnfProposition . fromProposition
+  evaluate :: Env -> DnfProposition -> Maybe Bool
   evaluate env (DnfProposition terms) = foldr foldPropFunc (Just False) terms where
     foldPropFunc :: DnfTerm -> Maybe Bool -> Maybe Bool
     foldPropFunc term next = case evalTerm term of
@@ -422,3 +460,7 @@ instance Representation DnfProposition where
       Nothing -> Nothing
       Just False -> Just False
       Just True -> next
+  freeVars :: DnfProposition -> Set Varname
+  freeVars (DnfProposition terms) = foldr ((<>) . getTermVars) Set.empty terms where
+    getTermVars :: DnfTerm -> Set Varname
+    getTermVars = foldr ((<>) . negAtomFreeVars) Set.empty . unwrapDnfTerm
