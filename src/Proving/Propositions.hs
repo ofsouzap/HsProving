@@ -1,11 +1,19 @@
 module Proving.Propositions
-  ( Varname
+  ( -- * Basics #basics#
+    -- $basics
+    Varname
+    -- * Environments #environments#
+    -- $environments
   , Env
   , createEnv
   , envEval
+    -- * Basic propositions #basic-propositions#
+    -- $basicPropositions
   , Atom(..)
   , Proposition(..)
   , evaluateProposition
+    -- * Negated Normal Form #nnf#
+    -- $nnf
   , NegAtom(..)
   , NnfProposition(..)
   , propositionToNnfProposition ) where
@@ -20,9 +28,15 @@ import Data.List
 bracketWrap :: String -> String
 bracketWrap s = "(" ++ s ++ ")"
 
+-- $basics
+--
+-- Basics for the module
+
 type Varname = String
 
--- Environments
+-- $environments
+--
+-- Environments (aka valuations) used for evaluation
 
 -- | Valuations mapping variable names to truth values
 newtype Env = Env [(Varname, Bool)]
@@ -36,7 +50,9 @@ envEval var (Env xs) =
     foldFunc (hVar, hVal) next =
       if hVar == var then Just hVal else next
 
--- Propositions
+-- $basicPropositions
+--
+-- Basic propositions that are more human-writable.
 
 -- | A propositional atom
 data Atom
@@ -88,7 +104,9 @@ evaluateProposition env (PropAnd ps) = foldr foldFunc (Just True) ps where
 evaluateProposition env (PropImpl a b) = evaluateProposition env (PropOr (PropNot a :| [b]))
 evaluateProposition env (PropBiImpl a b) = evaluateProposition env (PropOr (PropAnd (a :| [b]) :| [PropAnd (PropNot a :| [PropNot b])]))
 
--- NNF
+-- $nnf
+--
+-- Propositions in Negated Normal Form (NNF).
 
 -- | Propositional logic proposition without implication
 data SimpleProposition
@@ -126,7 +144,7 @@ data NnfProposition
 instance Show NnfProposition where
   show (NnfAtom (NegAtomLit b)) = show b
   show (NnfAtom (NegAtomVar var)) = var
-  show (NnfAtom (NegAtomNegVar var)) = "¬" ++ show var
+  show (NnfAtom (NegAtomNegVar var)) = "¬" ++ var
   show (NnfOr ps) = (intercalate "+" . NonEmpty.toList .fmap (bracketWrap . show)) ps
   show (NnfAnd ps) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) ps
 
@@ -140,6 +158,6 @@ simplePropositionToNnfProposition (SPNot (SPAtom (AtomVar var))) = (NnfAtom . Ne
 simplePropositionToNnfProposition (SPNot (SPOr ps)) = (NnfAnd . fmap (simplePropositionToNnfProposition . SPNot)) ps
 simplePropositionToNnfProposition (SPNot (SPAnd ps)) = (NnfOr . fmap (simplePropositionToNnfProposition . SPNot)) ps
 
--- | Convert a raw proposition to a proposition in NNF (Negated Normal Form)
+-- | Convert a basic proposition to a proposition in NNF (Negated Normal Form)
 propositionToNnfProposition :: Proposition -> NnfProposition
 propositionToNnfProposition = simplePropositionToNnfProposition . propositionToSimpleProposition
