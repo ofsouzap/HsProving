@@ -9,7 +9,8 @@ author:             Ofsouzap
 maintainer:         ofsouzap@gmail.com
 
 library
-    exposed-modules:  Proving.Propositions
+    exposed-modules:  Proving.Propositions,
+                      Proving.Propositions.Shorthand
     ghc-options:      -Wall
     build-depends:    base ^>=4.16.4.0
     hs-source-dirs:   src

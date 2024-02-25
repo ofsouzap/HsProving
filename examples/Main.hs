@@ -1,11 +1,11 @@
 module Main where
 
-import Data.List.NonEmpty ( NonEmpty((:|)) )
 import Proving.Propositions
+import Proving.Propositions.Shorthand
 
 main :: IO ()
 main = do
-  let p = PropImpl (PropAnd (PropAtom (AtomVar "P") :| [PropAtom (AtomVar "Q")])) (PropNot (PropAtom (AtomVar "Q")))
+  let p = pimpl (pand [pvar "P", pvar "Q"]) (pnot (pvar "Q"))
   print p
   let env1 = createEnv [("P", True), ("Q", False)]
   putStrLn "Eval {P, !Q}:"
