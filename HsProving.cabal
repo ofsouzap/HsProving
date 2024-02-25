@@ -12,7 +12,8 @@ library
     exposed-modules:  Proving.Propositions,
                       Proving.Propositions.Shorthand
     ghc-options:      -Wall
-    build-depends:    base ^>=4.16.4.0
+    build-depends:    base ^>=4.16.4.0,
+                      QuickCheck
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -22,4 +23,17 @@ executable Examples
     build-depends:    base ^>=4.16.4.0,
                       Proving
     hs-source-dirs:   examples
+    default-language: Haskell2010
+
+test-suite TestProving
+    main-is:          Main.hs
+    other-modules:    PropositionTests
+    build-depends:    base ^>=4.16.4.0,
+                      GoodCoolMath,
+                      hspec,
+                      QuickCheck,
+                      checkers,
+                      hspec-checkers,
+    hs-source-dirs:   TestProving
+    type:             exitcode-stdio-1.0
     default-language: Haskell2010
