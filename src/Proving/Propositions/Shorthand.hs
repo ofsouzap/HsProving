@@ -16,8 +16,8 @@ plit :: Bool -> Proposition
 plit = PropAtom . AtomLit
 
 -- | A variable in a proposition
-pvar :: Varname -> Proposition
-pvar = PropAtom . AtomVar
+pvar :: String -> Proposition
+pvar = PropAtom . AtomVar . Varname
 
 -- | Negate a proposition
 pnot :: Proposition -> Proposition

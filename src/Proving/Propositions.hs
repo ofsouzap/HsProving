@@ -1,7 +1,7 @@
 module Proving.Propositions
   ( -- * Basics #basics#
     -- $basics
-    Varname
+    Varname(..)
     -- * Environments #environments#
     -- $environments
   , Env
@@ -31,12 +31,28 @@ module Proving.Propositions
   , DnfProposition(..)
   , nnfPropositionToDnfProposition ) where
 
+import qualified Data.Bifunctor as Bifunctor
+  ( first )
 import Data.List.NonEmpty
   ( NonEmpty((:|)) )
 import qualified Data.List.NonEmpty as NonEmpty
-  ( toList )
+  ( toList
+  , fromList )
 import Data.List
   ( intercalate )
+import Test.QuickCheck
+  ( sized
+  , scale
+  , chooseInt
+  , vectorOf
+  , listOf
+  , resize, elements )
+import Test.QuickCheck.Arbitrary
+  ( Arbitrary
+  , arbitrary )
+import Test.QuickCheck.Gen
+  ( Gen
+  , frequency )
 
 bracketWrap :: String -> String
 bracketWrap s = "(" ++ s ++ ")"
@@ -45,7 +61,18 @@ bracketWrap s = "(" ++ s ++ ")"
 --
 -- Basics for the module
 
-type Varname = String
+newtype Varname = Varname String
+  deriving ( Eq )
+
+instance Show Varname where
+  show (Varname var) = var
+
+instance Arbitrary Varname where
+  arbitrary = do
+    let letterChars = enumFromTo 'A' 'Z'
+    h <- elements letterChars
+    ts <- (resize 2 . listOf) (elements letterChars)
+    (return . Varname) (h : ts)
 
 -- $environments
 --
@@ -54,8 +81,8 @@ type Varname = String
 -- | Valuations mapping variable names to truth values
 newtype Env = Env [(Varname, Bool)]
 
-createEnv :: [(Varname, Bool)] -> Env
-createEnv = Env
+createEnv :: [(String, Bool)] -> Env
+createEnv = Env . map (Bifunctor.first Varname)
 
 envEval :: Varname -> Env -> Maybe Bool
 envEval var (Env xs) =
@@ -73,14 +100,19 @@ data Atom
   | AtomVar Varname
   deriving ( Eq )
 
-evalAtom :: Env -> Atom -> Maybe Bool
-evalAtom _ (AtomLit b) = Just b
-evalAtom env (AtomVar var) = envEval var env
-
 instance Show Atom where
   show (AtomLit True) = "t"
   show (AtomLit False) = "f"
-  show (AtomVar var) = var
+  show (AtomVar var) = show var
+
+instance Arbitrary Atom where
+  arbitrary = frequency
+    [ (1, AtomLit <$> arbitrary)
+    , (1, AtomVar <$> arbitrary) ]
+
+evalAtom :: Env -> Atom -> Maybe Bool
+evalAtom _ (AtomLit b) = Just b
+evalAtom env (AtomVar var) = envEval var env
 
 -- | A proposition of propositional logic
 data Proposition
@@ -98,6 +130,31 @@ instance Show Proposition where
   show (PropAnd ps) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) ps
   show (PropImpl a b) = (bracketWrap . show) a ++ "->" ++ (bracketWrap . show) b
   show (PropBiImpl a b) = (bracketWrap . show) a ++ "<->" ++ (bracketWrap . show) b
+
+instance Arbitrary Proposition where
+  arbitrary = sized genSized where
+    genSized :: Int -> Gen Proposition
+    genSized n
+      | n <= 0 = PropAtom <$> arbitrary
+      | otherwise = frequency
+        [ (1, PropAtom <$> arbitrary)
+        , (1, PropNot <$> scale (max 0 . pred) arbitrary)
+        , (1, PropOr <$> genSubPs)
+        , (1, PropAnd <$> genSubPs)
+        , (1, do
+          let scaledArb = scale (max 0 . pred . (`div` 2)) arbitrary
+          x <- scaledArb
+          PropImpl x <$> scaledArb)
+        , (1, do
+          let scaledArb = scale (max 0 . pred . (`div` 2)) arbitrary
+          x <- scaledArb
+          PropBiImpl x <$> scaledArb) ]
+    genSubPs :: Gen (NonEmpty Proposition)
+    genSubPs = sized $ \ n ->
+      if n <= 0 then return <$> arbitrary
+      else do
+        subCount <- chooseInt (1, n)
+        NonEmpty.fromList <$> vectorOf subCount (scale (max 0 . pred . (`div` subCount)) arbitrary)
 
 -- $representation
 --
@@ -158,11 +215,17 @@ data NegAtom
   | NegAtomVar Varname
   | NegAtomNegVar Varname
 
+instance Arbitrary NegAtom where
+  arbitrary = frequency
+    [ (1, NegAtomLit <$> arbitrary)
+    , (1, NegAtomNegVar <$> arbitrary)
+    , (1, NegAtomVar <$> arbitrary) ]
+
 instance Show NegAtom where
   show (NegAtomLit True) = "t"
   show (NegAtomLit False) = "f"
-  show (NegAtomVar var) = var
-  show (NegAtomNegVar var) = "¬" ++ var
+  show (NegAtomVar var) = show var
+  show (NegAtomNegVar var) = "¬" ++ show var
 
 atomToNegAtom :: Atom -> NegAtom
 atomToNegAtom (AtomLit b) = NegAtomLit b
@@ -183,6 +246,22 @@ instance Show NnfProposition where
   show (NnfAtom a) = show a
   show (NnfOr ps) = (intercalate "+" . NonEmpty.toList .fmap (bracketWrap . show)) ps
   show (NnfAnd ps) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) ps
+
+instance Arbitrary NnfProposition where
+  arbitrary = sized genSized where
+    genSized :: Int -> Gen NnfProposition
+    genSized n
+      | n <= 0 = NnfAtom <$> arbitrary
+      | otherwise = frequency
+        [ (1, NnfAtom <$> arbitrary)
+        , (1, NnfOr <$> genSubPs)
+        , (1, NnfAnd <$> genSubPs) ]
+    genSubPs :: Gen (NonEmpty NnfProposition)
+    genSubPs = sized $ \ n ->
+      if n <= 0 then return <$> arbitrary
+      else do
+        subCount <- chooseInt (1, n)
+        NonEmpty.fromList <$> vectorOf subCount (scale (max 0 . pred . (`div` subCount)) arbitrary)
 
 simplePropositionToNnfProposition :: SimpleProposition -> NnfProposition
 simplePropositionToNnfProposition (SPAtom a) = (NnfAtom . atomToNegAtom) a
@@ -222,6 +301,11 @@ unwrapCnfTerm (CnfTerm xs) = xs
 instance Show CnfTerm where
   show (CnfTerm xs) = (intercalate "+" . NonEmpty.toList . fmap (bracketWrap . show)) xs
 
+instance Arbitrary CnfTerm where
+  arbitrary = sized $ \ n' -> do
+    n <- chooseInt (1, n')
+    CnfTerm . NonEmpty.fromList <$> vectorOf n arbitrary
+
 newtype CnfProposition = CnfProposition (NonEmpty CnfTerm)
 
 unwrapCnfProposition :: CnfProposition -> NonEmpty CnfTerm
@@ -229,6 +313,11 @@ unwrapCnfProposition (CnfProposition xs) = xs
 
 instance Show CnfProposition where
   show (CnfProposition xs) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) xs
+
+instance Arbitrary CnfProposition where
+  arbitrary = sized $ \ n' -> do
+    n <- chooseInt (1, n')
+    CnfProposition . NonEmpty.fromList <$> (vectorOf n . scale (`div` n)) arbitrary
 
 -- | Convert a proposition in NNF into a proposition in CNF
 nnfPropositionToCnfProposition :: NnfProposition -> CnfProposition
@@ -271,6 +360,11 @@ unwrapDnfTerm (DnfTerm xs) = xs
 instance Show DnfTerm where
   show (DnfTerm xs) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) xs
 
+instance Arbitrary DnfTerm where
+  arbitrary = sized $ \ n' -> do
+    n <- chooseInt (1, n')
+    DnfTerm . NonEmpty.fromList <$> vectorOf n arbitrary
+
 newtype DnfProposition = DnfProposition (NonEmpty DnfTerm)
 
 unwrapDnfProposition :: DnfProposition -> NonEmpty DnfTerm
@@ -278,6 +372,11 @@ unwrapDnfProposition (DnfProposition xs) = xs
 
 instance Show DnfProposition where
   show (DnfProposition xs) = (intercalate "+" . NonEmpty.toList . fmap (bracketWrap . show)) xs
+
+instance Arbitrary DnfProposition where
+  arbitrary = sized $ \ n' -> do
+    n <- chooseInt (1, n')
+    DnfProposition . NonEmpty.fromList <$> (vectorOf n . scale (`div` n)) arbitrary
 
 -- | Convert a proposition in NNF into a proposition in DNF
 nnfPropositionToDnfProposition :: NnfProposition -> DnfProposition
