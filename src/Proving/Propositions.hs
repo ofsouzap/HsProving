@@ -7,6 +7,8 @@ module Proving.Propositions
   , Env
   , createEnv
   , envEval
+  , arbitraryEnvForVars
+  , arbitraryEnvForVarStrings
     -- * Representation #representations#
     -- $representation
   , Representation
@@ -81,6 +83,9 @@ instance Arbitrary Varname where
 -- | Valuations mapping variable names to truth values
 newtype Env = Env [(Varname, Bool)]
 
+instance Show Env where
+  show (Env xs) = show xs
+
 createEnv :: [(String, Bool)] -> Env
 createEnv = Env . map (Bifunctor.first Varname)
 
@@ -89,6 +94,17 @@ envEval var (Env xs) =
   foldr foldFunc Nothing xs where
     foldFunc (hVar, hVal) next =
       if hVar == var then Just hVal else next
+
+-- | Create an arbitrary environment with a mapping for the given variables.
+arbitraryEnvForVars :: [Varname] -> Gen Env
+arbitraryEnvForVars vars = do
+  vals <- vectorOf (length vars) (arbitrary :: Gen Bool)
+  (return . Env) (zip vars vals)
+
+-- | Create an arbitrary environment with a mapping for the given variables.
+-- Variable names are given as strings.
+arbitraryEnvForVarStrings :: [String] -> Gen Env
+arbitraryEnvForVarStrings = arbitraryEnvForVars . map Varname
 
 -- $basicPropositions
 --
