@@ -16,7 +16,13 @@ module Proving.Propositions
     -- $nnf
   , NegAtom(..)
   , NnfProposition(..)
-  , propositionToNnfProposition ) where
+  , propositionToNnfProposition
+    -- * Conjunctive Normal Form #cnf#
+    -- $cnf
+  , CnfTerm(..)
+  , CnfProposition(..)
+  , nnfPropositionToCnfProposition
+  , propositionToCnfProposition ) where
 
 import Data.List.NonEmpty
   ( NonEmpty((:|)) )
@@ -131,6 +137,12 @@ data NegAtom
   | NegAtomVar Varname
   | NegAtomNegVar Varname
 
+instance Show NegAtom where
+  show (NegAtomLit True) = "t"
+  show (NegAtomLit False) = "f"
+  show (NegAtomVar var) = var
+  show (NegAtomNegVar var) = "¬" ++ var
+
 atomToNegAtom :: Atom -> NegAtom
 atomToNegAtom (AtomLit b) = NegAtomLit b
 atomToNegAtom (AtomVar var) = NegAtomVar var
@@ -142,9 +154,7 @@ data NnfProposition
   | NnfAnd (NonEmpty NnfProposition)
 
 instance Show NnfProposition where
-  show (NnfAtom (NegAtomLit b)) = show b
-  show (NnfAtom (NegAtomVar var)) = var
-  show (NnfAtom (NegAtomNegVar var)) = "¬" ++ var
+  show (NnfAtom a) = show a
   show (NnfOr ps) = (intercalate "+" . NonEmpty.toList .fmap (bracketWrap . show)) ps
   show (NnfAnd ps) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) ps
 
@@ -161,3 +171,40 @@ simplePropositionToNnfProposition (SPNot (SPAnd ps)) = (NnfOr . fmap (simpleProp
 -- | Convert a basic proposition to a proposition in NNF (Negated Normal Form)
 propositionToNnfProposition :: Proposition -> NnfProposition
 propositionToNnfProposition = simplePropositionToNnfProposition . propositionToSimpleProposition
+
+-- $cnf
+--
+-- Propositions in Conjunctive Normal Form (CNF)
+
+newtype CnfTerm = CnfTerm (NonEmpty NegAtom)
+
+unwrapCnfTerm :: CnfTerm -> NonEmpty NegAtom
+unwrapCnfTerm (CnfTerm xs) = xs
+
+instance Show CnfTerm where
+  show (CnfTerm xs) = (intercalate "+" . NonEmpty.toList . fmap (bracketWrap . show)) xs
+
+newtype CnfProposition = CnfProposition (NonEmpty CnfTerm)
+
+unwrapCnfProposition :: CnfProposition -> NonEmpty CnfTerm
+unwrapCnfProposition (CnfProposition xs) = xs
+
+instance Show CnfProposition where
+  show (CnfProposition xs) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) xs
+
+-- | Convert a proposition in NNF into a proposition in CNF
+nnfPropositionToCnfProposition :: NnfProposition -> CnfProposition
+nnfPropositionToCnfProposition (NnfAtom a) = (CnfProposition . pure . CnfTerm . pure) a
+nnfPropositionToCnfProposition (NnfAnd ps) = CnfProposition (ps >>= unwrapCnfProposition . nnfPropositionToCnfProposition)
+nnfPropositionToCnfProposition (NnfOr ps) = (CnfProposition . fmap CnfTerm . fuseAll) (fmap unwrapCnfTerm . unwrapCnfProposition . nnfPropositionToCnfProposition <$> ps) where
+  fuseTwo :: NonEmpty (NonEmpty NegAtom) -> NonEmpty (NonEmpty NegAtom) -> NonEmpty (NonEmpty NegAtom)
+  fuseTwo xs ys = do
+    x <- xs
+    y <- ys
+    return (x <> y)
+  fuseAll :: NonEmpty (NonEmpty (NonEmpty NegAtom)) -> NonEmpty (NonEmpty NegAtom)
+  fuseAll (h :| ts) = foldr fuseTwo h ts
+
+-- | Convert a basic proposition into a proposition in CNF
+propositionToCnfProposition :: Proposition -> CnfProposition
+propositionToCnfProposition = nnfPropositionToCnfProposition . propositionToNnfProposition
