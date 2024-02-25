@@ -7,28 +7,29 @@ module Proving.Propositions
   , Env
   , createEnv
   , envEval
+    -- * Representation #representations#
+    -- $representation
+  , Representation
+  , fromProposition
+  , evaluate
     -- * Basic propositions #basic-propositions#
     -- $basicPropositions
   , Atom(..)
   , Proposition(..)
-  , evaluateProposition
     -- * Negated Normal Form #nnf#
     -- $nnf
   , NegAtom(..)
   , NnfProposition(..)
-  , propositionToNnfProposition
     -- * Conjunctive Normal Form #cnf#
     -- $cnf
   , CnfTerm(..)
   , CnfProposition(..)
   , nnfPropositionToCnfProposition
-  , propositionToCnfProposition
     -- * Disjunctive Normal Form #dnf#
     -- $dnf
   , DnfTerm(..)
   , DnfProposition(..)
-  , nnfPropositionToDnfProposition
-  , propositionToDnfProposition ) where
+  , nnfPropositionToDnfProposition ) where
 
 import Data.List.NonEmpty
   ( NonEmpty((:|)) )
@@ -72,6 +73,10 @@ data Atom
   | AtomVar Varname
   deriving ( Eq )
 
+evalAtom :: Env -> Atom -> Maybe Bool
+evalAtom _ (AtomLit b) = Just b
+evalAtom env (AtomVar var) = envEval var env
+
 instance Show Atom where
   show (AtomLit True) = "t"
   show (AtomLit False) = "f"
@@ -94,27 +99,37 @@ instance Show Proposition where
   show (PropImpl a b) = (bracketWrap . show) a ++ "->" ++ (bracketWrap . show) b
   show (PropBiImpl a b) = (bracketWrap . show) a ++ "<->" ++ (bracketWrap . show) b
 
--- | Evaluate a proposition. If fails to evaluate due to not having a valuation for a variable then returns Nothing.
--- Due to how evaluation is performed, this doesn't always detect variables without valuations and will sometimes return a
--- result if one can be determined without evaluating some variables.
-evaluateProposition :: Env -> Proposition -> Maybe Bool
-evaluateProposition _ (PropAtom (AtomLit b)) = Just b
-evaluateProposition env (PropAtom (AtomVar var)) = envEval var env
-evaluateProposition env (PropNot p) = not <$> evaluateProposition env p
-evaluateProposition env (PropOr ps) = foldr foldFunc (Just False) ps where
-  foldFunc :: Proposition -> Maybe Bool -> Maybe Bool
-  foldFunc p next = case evaluateProposition env p of
-    Nothing -> Nothing
-    Just True -> Just True
-    Just False -> next
-evaluateProposition env (PropAnd ps) = foldr foldFunc (Just True) ps where
-  foldFunc :: Proposition -> Maybe Bool -> Maybe Bool
-  foldFunc p next = case evaluateProposition env p of
-    Nothing -> Nothing
-    Just False -> Just False
-    Just True -> next
-evaluateProposition env (PropImpl a b) = evaluateProposition env (PropOr (PropNot a :| [b]))
-evaluateProposition env (PropBiImpl a b) = evaluateProposition env (PropOr (PropAnd (a :| [b]) :| [PropAnd (PropNot a :| [PropNot b])]))
+-- $representation
+--
+-- A typeclass for different representations of propositions in propositional logic.
+
+-- | The typeclass for representations of propositions in propositional logic.
+class Representation a where
+  -- | Convert the basic representation of a proposition into the other representation
+  fromProposition :: Proposition -> a
+  -- | Evaluate a proposition. If fails to evaluate due to not having a valuation for a variable then returns Nothing.
+  -- Due to how evaluation is sometimes performed, this doesn't always detect variables without valuations and will sometimes return a
+  -- result if one can be determined without evaluating some variables.
+  evaluate :: Env -> a -> Maybe Bool
+
+instance Representation Proposition where
+  fromProposition = id
+  evaluate env (PropAtom a) = evalAtom env a
+  evaluate env (PropNot p) = not <$> evaluate env p
+  evaluate env (PropOr ps) = foldr foldFunc (Just False) ps where
+    foldFunc :: Proposition -> Maybe Bool -> Maybe Bool
+    foldFunc p next = case evaluate env p of
+      Nothing -> Nothing
+      Just True -> Just True
+      Just False -> next
+  evaluate env (PropAnd ps) = foldr foldFunc (Just True) ps where
+    foldFunc :: Proposition -> Maybe Bool -> Maybe Bool
+    foldFunc p next = case evaluate env p of
+      Nothing -> Nothing
+      Just False -> Just False
+      Just True -> next
+  evaluate env (PropImpl a b) = evaluate env (PropOr (PropNot a :| [b]))
+  evaluate env (PropBiImpl a b) = evaluate env (PropOr (PropAnd (a :| [b]) :| [PropAnd (PropNot a :| [PropNot b])]))
 
 -- $nnf
 --
@@ -153,6 +168,11 @@ atomToNegAtom :: Atom -> NegAtom
 atomToNegAtom (AtomLit b) = NegAtomLit b
 atomToNegAtom (AtomVar var) = NegAtomVar var
 
+evalNegAtom :: Env -> NegAtom -> Maybe Bool
+evalNegAtom _ (NegAtomLit b) = Just b
+evalNegAtom env (NegAtomVar var) = envEval var env
+evalNegAtom env (NegAtomNegVar var) = not <$> envEval var env
+
 -- | Propositional logic proposition in NNF (Negated Normal Form)
 data NnfProposition
   = NnfAtom NegAtom
@@ -174,9 +194,21 @@ simplePropositionToNnfProposition (SPNot (SPAtom (AtomVar var))) = (NnfAtom . Ne
 simplePropositionToNnfProposition (SPNot (SPOr ps)) = (NnfAnd . fmap (simplePropositionToNnfProposition . SPNot)) ps
 simplePropositionToNnfProposition (SPNot (SPAnd ps)) = (NnfOr . fmap (simplePropositionToNnfProposition . SPNot)) ps
 
--- | Convert a basic proposition to a proposition in NNF (Negated Normal Form)
-propositionToNnfProposition :: Proposition -> NnfProposition
-propositionToNnfProposition = simplePropositionToNnfProposition . propositionToSimpleProposition
+instance Representation NnfProposition where
+  fromProposition = simplePropositionToNnfProposition . propositionToSimpleProposition
+  evaluate env (NnfAtom a) = evalNegAtom env a
+  evaluate env (NnfOr ps) = foldr foldFunc (Just False) ps where
+    foldFunc :: NnfProposition -> Maybe Bool -> Maybe Bool
+    foldFunc p next = case evaluate env p of
+      Nothing -> Nothing
+      Just True -> Just True
+      Just False -> next
+  evaluate env (NnfAnd ps) = foldr foldFunc (Just True) ps where
+    foldFunc :: NnfProposition -> Maybe Bool -> Maybe Bool
+    foldFunc p next = case evaluate env p of
+      Nothing -> Nothing
+      Just False -> Just False
+      Just True -> next
 
 -- $cnf
 --
@@ -211,9 +243,21 @@ nnfPropositionToCnfProposition (NnfOr ps) = (CnfProposition . fmap CnfTerm . fus
   fuseAll :: NonEmpty (NonEmpty (NonEmpty NegAtom)) -> NonEmpty (NonEmpty NegAtom)
   fuseAll (h :| ts) = foldr fuseTwo h ts
 
--- | Convert a basic proposition into a proposition in CNF
-propositionToCnfProposition :: Proposition -> CnfProposition
-propositionToCnfProposition = nnfPropositionToCnfProposition . propositionToNnfProposition
+instance Representation CnfProposition where
+  fromProposition = nnfPropositionToCnfProposition . fromProposition
+  evaluate env (CnfProposition terms) = foldr foldPropFunc (Just True) terms where
+    foldPropFunc :: CnfTerm -> Maybe Bool -> Maybe Bool
+    foldPropFunc term next = case evalTerm term of
+      Nothing -> Nothing
+      Just False -> Just False
+      Just True -> next
+    evalTerm :: CnfTerm -> Maybe Bool
+    evalTerm (CnfTerm atoms) = foldr foldTermFunc (Just False) atoms
+    foldTermFunc :: NegAtom -> Maybe Bool -> Maybe Bool
+    foldTermFunc p next = case evalNegAtom env p of
+      Nothing -> Nothing
+      Just True -> Just True
+      Just False -> next
 
 -- $dnf
 --
@@ -248,6 +292,18 @@ nnfPropositionToDnfProposition (NnfAnd ps) = (DnfProposition . fmap DnfTerm . fu
   fuseAll :: NonEmpty (NonEmpty (NonEmpty NegAtom)) -> NonEmpty (NonEmpty NegAtom)
   fuseAll (h :| ts) = foldr fuseTwo h ts
 
--- | Convert a basic proposition into a proposition in DNF
-propositionToDnfProposition :: Proposition -> DnfProposition
-propositionToDnfProposition = nnfPropositionToDnfProposition . propositionToNnfProposition
+instance Representation DnfProposition where
+  fromProposition = nnfPropositionToDnfProposition . fromProposition
+  evaluate env (DnfProposition terms) = foldr foldPropFunc (Just False) terms where
+    foldPropFunc :: DnfTerm -> Maybe Bool -> Maybe Bool
+    foldPropFunc term next = case evalTerm term of
+      Nothing -> Nothing
+      Just True -> Just True
+      Just False -> next
+    evalTerm :: DnfTerm -> Maybe Bool
+    evalTerm (DnfTerm atoms) = foldr foldTermFunc (Just True) atoms
+    foldTermFunc :: NegAtom -> Maybe Bool -> Maybe Bool
+    foldTermFunc p next = case evalNegAtom env p of
+      Nothing -> Nothing
+      Just False -> Just False
+      Just True -> next
