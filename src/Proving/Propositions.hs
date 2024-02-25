@@ -22,7 +22,13 @@ module Proving.Propositions
   , CnfTerm(..)
   , CnfProposition(..)
   , nnfPropositionToCnfProposition
-  , propositionToCnfProposition ) where
+  , propositionToCnfProposition
+    -- * Disjunctive Normal Form #dnf#
+    -- $dnf
+  , DnfTerm(..)
+  , DnfProposition(..)
+  , nnfPropositionToDnfProposition
+  , propositionToDnfProposition ) where
 
 import Data.List.NonEmpty
   ( NonEmpty((:|)) )
@@ -208,3 +214,40 @@ nnfPropositionToCnfProposition (NnfOr ps) = (CnfProposition . fmap CnfTerm . fus
 -- | Convert a basic proposition into a proposition in CNF
 propositionToCnfProposition :: Proposition -> CnfProposition
 propositionToCnfProposition = nnfPropositionToCnfProposition . propositionToNnfProposition
+
+-- $dnf
+--
+-- Propositions in Disjunctive Normal Form (DNF)
+
+newtype DnfTerm = DnfTerm (NonEmpty NegAtom)
+
+unwrapDnfTerm :: DnfTerm -> NonEmpty NegAtom
+unwrapDnfTerm (DnfTerm xs) = xs
+
+instance Show DnfTerm where
+  show (DnfTerm xs) = (intercalate "." . NonEmpty.toList . fmap (bracketWrap . show)) xs
+
+newtype DnfProposition = DnfProposition (NonEmpty DnfTerm)
+
+unwrapDnfProposition :: DnfProposition -> NonEmpty DnfTerm
+unwrapDnfProposition (DnfProposition xs) = xs
+
+instance Show DnfProposition where
+  show (DnfProposition xs) = (intercalate "+" . NonEmpty.toList . fmap (bracketWrap . show)) xs
+
+-- | Convert a proposition in NNF into a proposition in DNF
+nnfPropositionToDnfProposition :: NnfProposition -> DnfProposition
+nnfPropositionToDnfProposition (NnfAtom a) = (DnfProposition . pure . DnfTerm . pure) a
+nnfPropositionToDnfProposition (NnfOr ps) = DnfProposition (ps >>= unwrapDnfProposition . nnfPropositionToDnfProposition)
+nnfPropositionToDnfProposition (NnfAnd ps) = (DnfProposition . fmap DnfTerm . fuseAll) (fmap unwrapDnfTerm . unwrapDnfProposition . nnfPropositionToDnfProposition <$> ps) where
+  fuseTwo :: NonEmpty (NonEmpty NegAtom) -> NonEmpty (NonEmpty NegAtom) -> NonEmpty (NonEmpty NegAtom)
+  fuseTwo xs ys = do
+    x <- xs
+    y <- ys
+    return (x <> y)
+  fuseAll :: NonEmpty (NonEmpty (NonEmpty NegAtom)) -> NonEmpty (NonEmpty NegAtom)
+  fuseAll (h :| ts) = foldr fuseTwo h ts
+
+-- | Convert a basic proposition into a proposition in DNF
+propositionToDnfProposition :: Proposition -> DnfProposition
+propositionToDnfProposition = nnfPropositionToDnfProposition . propositionToNnfProposition

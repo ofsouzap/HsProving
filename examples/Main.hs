@@ -6,7 +6,8 @@ import Proving.Propositions.Shorthand
 main :: IO ()
 main = do
   -- let p = pimpl (pand [pvar "P", pvar "Q"]) (pnot (pvar "Q"))
-  let p = por [pand [pvar "A", pvar "B", pvar "C"], pand [pvar "D", pvar "E"]]
+  -- let p = por [pand [pvar "A", pvar "B", pvar "C"], pand [pvar "D", pvar "E"]]
+  let p = pand [por [pvar "A", pvar "B", pvar "C"], por [pvar "D", pvar "E"]]
   print p
   let env1 = createEnv [("P", True), ("Q", False)]
   putStrLn "Eval {P, !Q}:"
@@ -24,3 +25,5 @@ main = do
   (print . propositionToNnfProposition) p
   putStrLn "CNF:"
   (print . propositionToCnfProposition) p
+  putStrLn "DNF:"
+  (print . propositionToDnfProposition) p
