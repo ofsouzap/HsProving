@@ -10,6 +10,7 @@ module Proving.Propositions
   , envEval
   , arbitraryEnvForVars
   , arbitraryEnvForVarStrings
+  , arbitraryEnvForProp
     -- * Representation #representations#
     -- $representation
   , Representation(..)
@@ -45,7 +46,8 @@ import Data.Set
   ( Set )
 import qualified Data.Set as Set
   ( singleton
-  , empty )
+  , empty
+  , toList )
 import Test.QuickCheck
   ( sized
   , scale
@@ -109,6 +111,10 @@ arbitraryEnvForVars vars = do
 -- Variable names are given as strings.
 arbitraryEnvForVarStrings :: [String] -> Gen Env
 arbitraryEnvForVarStrings = arbitraryEnvForVars . map Varname
+
+-- | Create an arbitrary environment with a mapping for the free variables of the given proposition representation.
+arbitraryEnvForProp :: Representation r => r -> Gen Env
+arbitraryEnvForProp = arbitraryEnvForVars . Set.toList . freeVars
 
 -- $basicPropositions
 --
