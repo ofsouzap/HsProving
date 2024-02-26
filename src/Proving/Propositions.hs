@@ -122,26 +122,26 @@ arbitraryEnvForProp = arbitraryEnvForVars . Set.toList . freeVars
 
 -- | A propositional atom
 data Atom
-  = AtomLit Bool
+  = AtomConst Bool
   | AtomVar Varname
   deriving ( Eq )
 
 instance Show Atom where
-  show (AtomLit True) = "t"
-  show (AtomLit False) = "f"
+  show (AtomConst True) = "t"
+  show (AtomConst False) = "f"
   show (AtomVar var) = show var
 
 instance Arbitrary Atom where
   arbitrary = frequency
-    [ (1, AtomLit <$> arbitrary)
+    [ (1, AtomConst <$> arbitrary)
     , (1, AtomVar <$> arbitrary) ]
 
 evalAtom :: Env -> Atom -> Maybe Bool
-evalAtom _ (AtomLit b) = Just b
+evalAtom _ (AtomConst b) = Just b
 evalAtom env (AtomVar var) = envEval var env
 
 atomFreeVars :: Atom -> Set Varname
-atomFreeVars (AtomLit _) = Set.empty
+atomFreeVars (AtomConst _) = Set.empty
 atomFreeVars (AtomVar var) = Set.singleton var
 
 -- | A proposition of propositional logic
@@ -252,33 +252,34 @@ propositionToSimpleProposition (PropBiImpl a b) = SPOr
 
 -- | Atomic value containing negation information
 data NegAtom
-  = NegAtomLit Bool
+  = NegAtomConst Bool
   | NegAtomVar Varname
   | NegAtomNegVar Varname
+  deriving ( Eq )
 
 instance Arbitrary NegAtom where
   arbitrary = frequency
-    [ (1, NegAtomLit <$> arbitrary)
+    [ (1, NegAtomConst <$> arbitrary)
     , (1, NegAtomNegVar <$> arbitrary)
     , (1, NegAtomVar <$> arbitrary) ]
 
 instance Show NegAtom where
-  show (NegAtomLit True) = "t"
-  show (NegAtomLit False) = "f"
+  show (NegAtomConst True) = "t"
+  show (NegAtomConst False) = "f"
   show (NegAtomVar var) = show var
   show (NegAtomNegVar var) = "¬" ++ show var
 
 atomToNegAtom :: Atom -> NegAtom
-atomToNegAtom (AtomLit b) = NegAtomLit b
+atomToNegAtom (AtomConst b) = NegAtomConst b
 atomToNegAtom (AtomVar var) = NegAtomVar var
 
 evalNegAtom :: Env -> NegAtom -> Maybe Bool
-evalNegAtom _ (NegAtomLit b) = Just b
+evalNegAtom _ (NegAtomConst b) = Just b
 evalNegAtom env (NegAtomVar var) = envEval var env
 evalNegAtom env (NegAtomNegVar var) = not <$> envEval var env
 
 negAtomFreeVars :: NegAtom -> Set Varname
-negAtomFreeVars (NegAtomLit _) = Set.empty
+negAtomFreeVars (NegAtomConst _) = Set.empty
 negAtomFreeVars (NegAtomVar var) = Set.singleton var
 negAtomFreeVars (NegAtomNegVar var) = Set.singleton var
 
@@ -314,7 +315,7 @@ simplePropositionToNnfProposition (SPAtom a) = (NnfAtom . atomToNegAtom) a
 simplePropositionToNnfProposition (SPOr ps) = (NnfOr . fmap simplePropositionToNnfProposition) ps
 simplePropositionToNnfProposition (SPAnd ps) = (NnfAnd . fmap simplePropositionToNnfProposition) ps
 simplePropositionToNnfProposition (SPNot (SPNot p)) = simplePropositionToNnfProposition p
-simplePropositionToNnfProposition (SPNot (SPAtom (AtomLit b))) = (NnfAtom . NegAtomLit . not) b
+simplePropositionToNnfProposition (SPNot (SPAtom (AtomConst b))) = (NnfAtom . NegAtomConst . not) b
 simplePropositionToNnfProposition (SPNot (SPAtom (AtomVar var))) = (NnfAtom . NegAtomNegVar) var
 simplePropositionToNnfProposition (SPNot (SPOr ps)) = (NnfAnd . fmap (simplePropositionToNnfProposition . SPNot)) ps
 simplePropositionToNnfProposition (SPNot (SPAnd ps)) = (NnfOr . fmap (simplePropositionToNnfProposition . SPNot)) ps

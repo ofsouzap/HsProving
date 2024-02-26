@@ -13,7 +13,7 @@ import Proving.Propositions
 
 -- | A literal in a proposition
 plit :: Bool -> Proposition
-plit = PropAtom . AtomLit
+plit = PropAtom . AtomConst
 
 -- | A variable in a proposition
 pvar :: String -> Proposition
