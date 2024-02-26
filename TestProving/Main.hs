@@ -1,4 +1,9 @@
 module Main where
 
+import Test.Hspec
+  ( hspec )
+import qualified PropositionTests ( spec )
+
 main :: IO ()
-main = putStrLn "TODO"
+main = hspec $ do
+  PropositionTests.spec
