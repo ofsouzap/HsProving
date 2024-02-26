@@ -10,7 +10,8 @@ maintainer:         ofsouzap@gmail.com
 
 library
     exposed-modules:  Proving.Propositions,
-                      Proving.Propositions.Shorthand
+                      Proving.Propositions.Shorthand,
+                      Proving.Clauses
     ghc-options:      -Wall
     build-depends:    base ^>=4.16.4.0,
                       containers,
