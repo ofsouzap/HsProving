@@ -7,8 +7,9 @@ import Proving.Clauses
 main :: IO ()
 main = do
   -- let p = pimpl (pand [pvar "A", pvar "B"]) (pnot (pvar "B"))
-  let p = por [pand [pvar "A", pvar "B", pvar "C"], pand [pvar "D", pvar "E"]]
+  -- let p = por [pand [pvar "A", pvar "B", pvar "C"], pand [pvar "D", pvar "E"]]
   -- let p = pand [por [pvar "A", pvar "B", pvar "C"], por [pvar "D", pvar "E"]]
+  let p = pnot (pbiimpl (pnot (por [pvar "A", pvar "B"])) (pand [pnot (pvar "A"), pnot (pvar "B")]))
   print p
   let env1 = createEnv [("A", True), ("B", False)]
   putStrLn "Eval {P, !Q}:"
