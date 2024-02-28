@@ -2,11 +2,12 @@ module Main where
 
 import Proving.Propositions
 import Proving.Propositions.Shorthand
+import Proving.Clauses
 
 main :: IO ()
 main = do
-  let p = pimpl (pand [pvar "A", pvar "B"]) (pnot (pvar "B"))
-  -- let p = por [pand [pvar "A", pvar "B", pvar "C"], pand [pvar "D", pvar "E"]]
+  -- let p = pimpl (pand [pvar "A", pvar "B"]) (pnot (pvar "B"))
+  let p = por [pand [pvar "A", pvar "B", pvar "C"], pand [pvar "D", pvar "E"]]
   -- let p = pand [por [pvar "A", pvar "B", pvar "C"], por [pvar "D", pvar "E"]]
   print p
   let env1 = createEnv [("A", True), ("B", False)]
@@ -33,3 +34,8 @@ main = do
   let dnf = fromProposition p :: DnfProposition
   print dnf
   (print . evaluate env1) dnf
+  let clause = (fromCnfProposition . fromProposition) p
+  putStrLn "Clause:"
+  print clause
+  putStrLn "DPLL on clause:"
+  print (dpll clause)
