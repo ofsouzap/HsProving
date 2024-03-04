@@ -1,16 +1,16 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 module Proving.Clauses
-  -- ( -- * Clause Data -- TODO - uncomment
-  --   -- $construction
-  --   ClauseLit(..)
-  -- , Clause(..)
-  -- , emptyClause
-  -- , fromCnfTerm
-  -- , ClauseSet(..)
-  -- , fromCnfProposition
-  --   -- * Provers
-  --   -- $provers
-  -- , dpll )
+  ( -- * Clause Data
+    -- $construction
+    ClauseLit(..)
+  , Clause(..)
+  , emptyClause
+  , fromCnfTerm
+  , ClauseSet(..)
+  , fromCnfProposition
+    -- * Provers
+    -- $provers
+  , dpll )
   where
 
 import Control.Applicative
